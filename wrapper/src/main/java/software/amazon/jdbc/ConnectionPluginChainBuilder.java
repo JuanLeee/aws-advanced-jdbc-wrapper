@@ -33,12 +33,13 @@ import software.amazon.jdbc.plugin.AuroraConnectionTrackerPluginFactory;
 import software.amazon.jdbc.plugin.AuroraInitialConnectionStrategyPluginFactory;
 import software.amazon.jdbc.plugin.AwsSecretsManagerConnectionPluginFactory;
 import software.amazon.jdbc.plugin.ConnectTimeConnectionPluginFactory;
-import software.amazon.jdbc.plugin.DataCacheConnectionPluginFactory;
 import software.amazon.jdbc.plugin.DefaultConnectionPlugin;
 import software.amazon.jdbc.plugin.DriverMetaDataConnectionPluginFactory;
 import software.amazon.jdbc.plugin.ExecutionTimeConnectionPluginFactory;
 import software.amazon.jdbc.plugin.LogQueryConnectionPluginFactory;
 import software.amazon.jdbc.plugin.bluegreen.BlueGreenConnectionPluginFactory;
+import software.amazon.jdbc.plugin.cache.DataLocalCacheConnectionPluginFactory;
+import software.amazon.jdbc.plugin.cache.RemoteQueryCachePluginFactory;
 import software.amazon.jdbc.plugin.customendpoint.CustomEndpointPluginFactory;
 import software.amazon.jdbc.plugin.dev.DeveloperConnectionPluginFactory;
 import software.amazon.jdbc.plugin.efm.v1.HostMonitoringConnectionPluginV1Factory;
@@ -72,7 +73,8 @@ public class ConnectionPluginChainBuilder {
         {
           put("executionTime", new ExecutionTimeConnectionPluginFactory());
           put("logQuery", new LogQueryConnectionPluginFactory());
-          put("dataCache", new DataCacheConnectionPluginFactory());
+          put("dataCache", new DataLocalCacheConnectionPluginFactory());
+          put("remoteQueryCache", new RemoteQueryCachePluginFactory());
           put("customEndpoint", new CustomEndpointPluginFactory());
           put("efm", new HostMonitoringConnectionPluginV1Factory());
           put("efm2", new HostMonitoringConnectionPluginV2Factory());
@@ -108,7 +110,8 @@ public class ConnectionPluginChainBuilder {
         {
           put(DriverMetaDataConnectionPluginFactory.class, 100);
           put(BlueGreenConnectionPluginFactory.class, 200);
-          put(DataCacheConnectionPluginFactory.class, 300);
+          put(DataLocalCacheConnectionPluginFactory.class, 300);
+          put(RemoteQueryCachePluginFactory.class, 350);
           put(CustomEndpointPluginFactory.class, 400);
           put(AuroraInitialConnectionStrategyPluginFactory.class, 500);
           put(AuroraConnectionTrackerPluginFactory.class, 600);

@@ -76,6 +76,10 @@ public class TestEnvironment implements AutoCloseable {
   protected static final int PROXY_PORT = 8666;
   private static final String HIBERNATE_VERSION = "7.0.2"; // branch or tag name
 
+  // Valkey cache
+  private static final String VALKEY_CONTAINER_NAME_PREFIX = "valkey-container-";
+  private static final String VALKEY_SERVER_ADDRESS_PREFIX = "valkey-server-address-";
+
   private static final TestEnvironmentConfiguration config = new TestEnvironmentConfiguration();
   private static final boolean USE_OTLP_CONTAINER_FOR_TRACES = true;
 
@@ -99,6 +103,7 @@ public class TestEnvironment implements AutoCloseable {
 
   private GenericContainer<?> testContainer;
   private final ArrayList<GenericContainer<?>> databaseContainers = new ArrayList<>();
+  private final ArrayList<GenericContainer<?>> valkeyContainers = new ArrayList<>();
   private ArrayList<ToxiproxyContainer> proxyContainers;
   private GenericContainer<?> telemetryXRayContainer;
   private GenericContainer<?> telemetryOtlpContainer;
@@ -114,7 +119,6 @@ public class TestEnvironment implements AutoCloseable {
   }
 
   public static TestEnvironment build(TestEnvironmentRequest request) throws IOException, URISyntaxException {
-
     LOGGER.finest("Building test env: " + request.getEnvPreCreateIndex());
     preCreateEnvironment(request.getEnvPreCreateIndex());
 
@@ -126,6 +130,7 @@ public class TestEnvironment implements AutoCloseable {
         env = new TestEnvironment(request);
         initDatabaseParams(env);
         createDatabaseContainers(env);
+        createValkeyCacheContainer(env);
 
         if (request.getFeatures().contains(TestEnvironmentFeatures.IAM)) {
           throw new UnsupportedOperationException(TestEnvironmentFeatures.IAM.toString());
@@ -145,7 +150,6 @@ public class TestEnvironment implements AutoCloseable {
       case AURORA:
       case RDS_MULTI_AZ_CLUSTER:
       case RDS_MULTI_AZ_INSTANCE:
-
         env = createAuroraOrMultiAzEnvironment(request);
 
         if (request.getFeatures().contains(TestEnvironmentFeatures.BLUE_GREEN_DEPLOYMENT)) {
@@ -412,6 +416,71 @@ public class TestEnvironment implements AutoCloseable {
     env.auroraUtil.createCustomClusterParameterGroup(
         groupName, engine, engineVersion, env.info.getRequest().getDatabaseEngine());
     env.info.setClusterParameterGroupName(groupName);
+  }
+
+  private static void createValkeyCacheContainer(TestEnvironment env) {
+    if (env.info.getRequest().getFeatures().contains(TestEnvironmentFeatures.VALKEY_CACHE)) {
+      ContainerHelper containerHelper = new ContainerHelper();
+      List<TestInstanceInfo> cacheInstances = env.info.getValkeyServerInfo().getInstances();
+
+      // Instance 0: Create Valkey container WITH authentication + No TLS
+      int authInstanceIndex = cacheInstances.size();
+      env.info.setValkeyServerUsername("test_cache_user");
+      env.info.setValkeyServerPassword("test_cache_password");
+      GenericContainer<?> valkeyContainer = containerHelper.createValkeyContainer(
+          env.network,
+          VALKEY_SERVER_ADDRESS_PREFIX + authInstanceIndex,
+          true,
+          false);
+      env.valkeyContainers.add(valkeyContainer);
+      valkeyContainer.start();
+      cacheInstances.add(new TestInstanceInfo(
+          VALKEY_CONTAINER_NAME_PREFIX + authInstanceIndex,
+          VALKEY_SERVER_ADDRESS_PREFIX + authInstanceIndex,
+          6379));
+
+      // Instance 1: Create Valkey container WITHOUT authentication (default user, no password) + No TLS
+      int noAuthInstanceIndex = cacheInstances.size();
+      GenericContainer<?> valkeyContainerNoAuth = containerHelper.createValkeyContainer(
+          env.network,
+          VALKEY_SERVER_ADDRESS_PREFIX + noAuthInstanceIndex,
+          false,
+          false);
+      env.valkeyContainers.add(valkeyContainerNoAuth);
+      valkeyContainerNoAuth.start();
+      cacheInstances.add(new TestInstanceInfo(
+          VALKEY_CONTAINER_NAME_PREFIX + noAuthInstanceIndex,
+          VALKEY_SERVER_ADDRESS_PREFIX + noAuthInstanceIndex,
+          6379));
+
+      // Instance 2: Create Valkey container WITH Auth + TLS
+      int tlsAuthInstanceIndex = cacheInstances.size();
+      GenericContainer<?> valkeyContainerTlsAuth = containerHelper.createValkeyContainer(
+          env.network,
+          VALKEY_SERVER_ADDRESS_PREFIX + tlsAuthInstanceIndex,
+          true,
+          true);
+      env.valkeyContainers.add(valkeyContainerTlsAuth);
+      valkeyContainerTlsAuth.start();
+      cacheInstances.add(new TestInstanceInfo(
+          VALKEY_CONTAINER_NAME_PREFIX + tlsAuthInstanceIndex,
+          VALKEY_SERVER_ADDRESS_PREFIX + tlsAuthInstanceIndex,
+          6380));  // TLS port
+
+      // Instance 3: Create Valkey container WITHOUT Auth + TLS
+      int tlsNoAuthInstanceIndex = cacheInstances.size();
+      GenericContainer<?> valkeyContainerTlsNoAuth = containerHelper.createValkeyContainer(
+          env.network,
+          VALKEY_SERVER_ADDRESS_PREFIX + tlsNoAuthInstanceIndex,
+          false,
+          true);
+      env.valkeyContainers.add(valkeyContainerTlsNoAuth);
+      valkeyContainerTlsNoAuth.start();
+      cacheInstances.add(new TestInstanceInfo(
+          VALKEY_CONTAINER_NAME_PREFIX + tlsNoAuthInstanceIndex,
+          VALKEY_SERVER_ADDRESS_PREFIX + tlsNoAuthInstanceIndex,
+          6380));  // TLS port
+    }
   }
 
   private static void createDatabaseContainers(TestEnvironment env) {
@@ -1009,6 +1078,7 @@ public class TestEnvironment implements AutoCloseable {
               : "secret_password");
 
     env.info.setDatabaseInfo(new TestDatabaseInfo());
+    env.info.setValkeyServerInfo(new TestDatabaseInfo());
     env.info.getDatabaseInfo().setUsername(dbUsername);
     env.info.getDatabaseInfo().setPassword(dbPassword);
     env.info.getDatabaseInfo().setDefaultDbName(dbName);
@@ -1417,6 +1487,7 @@ public class TestEnvironment implements AutoCloseable {
       }
     }
     this.databaseContainers.clear();
+    this.valkeyContainers.clear();
 
     if (this.telemetryXRayContainer != null) {
       this.telemetryXRayContainer.stop();

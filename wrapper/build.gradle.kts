@@ -24,9 +24,12 @@ plugins {
     id("com.github.vlsi.ide")
     id("com.kncept.junit.reporter")
     id("com.gradleup.shadow") version "8.3.5" // 8.3.5 is the last version that is compatible with Java 8
+    id("com.google.osdetector") version "1.7.3" // Plugin used to detect OS and use for GLIDE
 }
 
 var useJacoco = (!project.hasProperty("jacocoEnabled") || project.property("jacocoEnabled").toString().toBoolean())
+
+val nativeClassifier: String = osdetector.classifier
 
 if (useJacoco) {
     apply(plugin = "org.gradle.jacoco")
@@ -44,11 +47,13 @@ dependencies {
     optionalImplementation("com.mchange:c3p0:0.11.2")
     optionalImplementation("org.apache.httpcomponents:httpclient:4.5.14")
     optionalImplementation("com.fasterxml.jackson.core:jackson-databind:2.21.0")
+    optionalImplementation("org.apache.commons:commons-pool2:2.11.1")
     optionalImplementation("org.jsoup:jsoup:1.21.1")
     optionalImplementation("com.amazonaws:aws-xray-recorder-sdk-core:2.18.2")
     optionalImplementation("io.opentelemetry:opentelemetry-api:1.60.1")
     optionalImplementation("io.opentelemetry:opentelemetry-sdk:1.60.1")
     optionalImplementation("io.opentelemetry:opentelemetry-sdk-metrics:1.60.1")
+    optionalImplementation("io.valkey:valkey-glide:2.3.0:$nativeClassifier")
 
     compileOnly("org.checkerframework:checker-qual:3.52.0")
     compileOnly("com.mysql:mysql-connector-j:9.6.0")
@@ -102,11 +107,13 @@ dependencies {
     testImplementation("io.opentelemetry:opentelemetry-sdk:1.60.1")
     testImplementation("io.opentelemetry:opentelemetry-sdk-metrics:1.60.1")
     testImplementation("io.opentelemetry:opentelemetry-exporter-otlp:1.60.1")
+    testImplementation("org.apache.commons:commons-pool2:2.11.1")
     testImplementation("org.jsoup:jsoup:1.21.1")
     testImplementation("de.vandermeer:asciitable:0.3.2")
     testImplementation("org.hibernate:hibernate-core:5.6.15.Final") // the latest version compatible with Java 8
     testImplementation("jakarta.persistence:jakarta.persistence-api:2.2.3")
-    testImplementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.21.1")
+    testImplementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.19.2")
+    testImplementation("io.valkey:valkey-glide:2.3.0:$nativeClassifier") // Note: to run unit tests on ARM Mac, change native classifier to "osx-x86_64"
 }
 
 repositories {
@@ -257,7 +264,7 @@ if (useJacoco) {
                         "software/amazon/jdbc/wrapper/*",
                         "software/amazon/jdbc/util/*",
                         "software/amazon/jdbc/profile/*",
-                        "software/amazon/jdbc/plugin/DataCacheConnectionPlugin*"
+                        "software/amazon/jdbc/plugin/cache/DataLocalCacheConnectionPlugin*"
                     )
                 }
             }))
@@ -272,7 +279,7 @@ if (useJacoco) {
                         "software/amazon/jdbc/wrapper/*",
                         "software/amazon/jdbc/util/*",
                         "software/amazon/jdbc/profile/*",
-                        "software/amazon/jdbc/plugin/DataCacheConnectionPlugin*"
+                        "software/amazon/jdbc/plugin/cache/DataLocalCacheConnectionPlugin*"
                     )
                 }
             }))
@@ -494,6 +501,21 @@ tasks.register<Test>("test-all-docker") {
         systemProperty("test-no-multi-az-instance", "true")
         systemProperty("test-no-performance", "true")
         systemProperty("test-no-bg", "true")
+        systemProperty("test-exclude-tags", "caching")
+    }
+}
+
+tasks.register<Test>("test-all-caching") {
+    group = "verification"
+    filter.includeTestsMatching("integration.host.TestRunner.runTests")
+    doFirst {
+        systemProperty("test-no-aurora", "true")
+        systemProperty("test-no-multi-az-cluster", "true")
+        systemProperty("test-no-multi-az-instance", "true")
+        systemProperty("test-no-performance", "true")
+        systemProperty("test-no-bg", "true")
+        systemProperty("test-valkey-cache", "true")
+        systemProperty("test-include-tags", "caching")
     }
 }
 

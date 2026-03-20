@@ -13,6 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+plugins{
+    id("com.google.osdetector") version "1.7.3" // Plugin used to detect OS and use for GLIDE
+}
+
+val nativeClassifier: String = osdetector.classifier
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-jdbc:2.7.13") // 2.7.13 is the last version compatible with Java 8
@@ -29,6 +34,9 @@ dependencies {
     implementation("com.amazonaws:aws-xray-recorder-sdk-core:2.18.2")
     implementation("org.jsoup:jsoup:1.21.1")
     implementation("com.mchange:c3p0:0.11.2")
+    implementation("org.apache.commons:commons-pool2:2.11.1")
+    implementation("io.github.cdimascio:dotenv-java:2.3.2")
+    implementation("io.valkey:valkey-glide:2.3.0:$nativeClassifier")
 }
 
 tasks.withType<JavaExec> {

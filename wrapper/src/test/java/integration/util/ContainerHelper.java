@@ -56,6 +56,7 @@ public class ContainerHelper {
   private static final String MYSQL_CONTAINER_IMAGE_NAME = "mysql:8.0.31";
   private static final String POSTGRES_CONTAINER_IMAGE_NAME = "postgres:latest";
   private static final String MARIADB_CONTAINER_IMAGE_NAME = "mariadb:10";
+  private static final String VALKEY_CONTAINER_IMAGE_NAME = "valkey/valkey:8.1";
   // Note: this image version may need to be occasionally updated to keep it up-to-date and prevent toxiproxy issues.
   private static final DockerImageName TOXIPROXY_IMAGE =
       DockerImageName.parse("ghcr.io/shopify/toxiproxy:2.11.0");
@@ -267,7 +268,10 @@ public class ContainerHelper {
             "app/test/resources/simplelogger.properties")
         .withCopyFileToContainer(
             MountableFile.forHostPath("./src/test/resources/junit-platform.properties"),
-            "app/test/resources/junit-platform.properties");
+            "app/test/resources/junit-platform.properties")
+        .withCopyFileToContainer(
+            MountableFile.forHostPath("./src/test/resources/certs/ca.crt"),
+            "app/test/resources/certs/ca.crt");
   }
 
   protected Long execInContainer(
@@ -434,6 +438,74 @@ public class ContainerHelper {
         container.getHost(),
         container.getMappedPort(PROXY_CONTROL_PORT));
     this.createProxy(toxiproxyClient, hostname, port);
+    return container;
+  }
+
+  public GenericContainer<?> createValkeyContainer(
+      Network network,
+      String networkAlias,
+      boolean authEnabled,
+      boolean tlsEnabled) {
+
+    GenericContainer<?> container = new GenericContainer<>(VALKEY_CONTAINER_IMAGE_NAME)
+        .withNetwork(network)
+        .withNetworkAliases(networkAlias);
+
+    if (tlsEnabled) {
+      // TLS uses port 6380
+      container.withExposedPorts(6380);
+
+      // Copy TLS certificates
+      container
+          .withCopyFileToContainer(
+              MountableFile.forHostPath("./src/test/resources/certs/ca.crt"),
+              "/etc/valkey/certs/ca.crt")
+          .withCopyFileToContainer(
+              MountableFile.forHostPath("./src/test/resources/certs/valkey.crt"),
+              "/etc/valkey/certs/valkey.crt")
+          .withCopyFileToContainer(
+              MountableFile.forHostPath("./src/test/resources/certs/valkey.key"),
+              "/etc/valkey/certs/valkey.key");
+
+      if (authEnabled) {
+        container
+            .withCopyFileToContainer(
+                MountableFile.forHostPath("./src/test/resources/valkey-acl.conf"),
+                "/etc/valkey/valkey-acl.conf")
+            .withCommand(
+                "--protected-mode no",
+                "--tls-port 6380",
+                "--port 0",
+                "--tls-cert-file /etc/valkey/certs/valkey.crt",
+                "--tls-key-file /etc/valkey/certs/valkey.key",
+                "--tls-ca-cert-file /etc/valkey/certs/ca.crt",
+                "--tls-auth-clients no",
+                "--aclfile /etc/valkey/valkey-acl.conf");
+      } else {
+        container.withCommand(
+            "--protected-mode no",
+            "--tls-port 6380",
+            "--port 0",
+            "--tls-cert-file /etc/valkey/certs/valkey.crt",
+            "--tls-key-file /etc/valkey/certs/valkey.key",
+            "--tls-ca-cert-file /etc/valkey/certs/ca.crt",
+            "--tls-auth-clients no");
+      }
+    } else {
+      // Non-TLS (existing logic)
+      container.withExposedPorts(6379);
+
+      if (authEnabled) {
+        container
+            .withCopyFileToContainer(
+                MountableFile.forHostPath("./src/test/resources/valkey-acl.conf"),
+                "/etc/valkey/valkey-acl.conf")
+            .withCommand("--protected-mode no", "--aclfile /etc/valkey/valkey-acl.conf");
+      } else {
+        container.withCommand("--protected-mode no");
+      }
+    }
+
     return container;
   }
 
