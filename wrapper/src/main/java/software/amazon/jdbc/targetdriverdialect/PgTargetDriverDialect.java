@@ -19,6 +19,7 @@ package software.amazon.jdbc.targetdriverdialect;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
@@ -33,7 +34,9 @@ import org.checkerframework.checker.nullness.qual.NonNull;
 import software.amazon.jdbc.HostSpec;
 import software.amazon.jdbc.JdbcMethod;
 import software.amazon.jdbc.PropertyDefinition;
+import software.amazon.jdbc.plugin.encryption.wrapper.PgEncryptedDataHelper;
 import software.amazon.jdbc.util.PropertyUtils;
+import software.amazon.jdbc.util.ResourceLock;
 
 public class PgTargetDriverDialect extends GenericTargetDriverDialect {
 
@@ -182,5 +185,37 @@ public class PgTargetDriverDialect extends GenericTargetDriverDialect {
   public String getSQLQueryString(PreparedStatement ps) {
     // For PG, this gives the raw query string itself. i.e. "select * from T where A = 1".
     return this.findSQLQueryString(ps, null);
+  }
+
+  @Override
+  public void registerDataType(@NonNull Connection connection, @NonNull String typeName, @NonNull String className)
+      throws SQLException {
+    org.postgresql.PGConnection pgConn = connection.unwrap(org.postgresql.PGConnection.class);
+    pgConn.addDataType(typeName, className);
+  }
+
+  private final ResourceLock encryptedDataHelperLock = new ResourceLock();
+  private volatile PgEncryptedDataHelper pgEncryptedDataHelper;
+
+  private PgEncryptedDataHelper getPgEncryptedDataHelper() {
+    if (pgEncryptedDataHelper == null) {
+      try (ResourceLock ignored = encryptedDataHelperLock.obtain()) {
+        if (pgEncryptedDataHelper == null) {
+          pgEncryptedDataHelper = new PgEncryptedDataHelper();
+        }
+      }
+    }
+    return pgEncryptedDataHelper;
+  }
+
+  @Override
+  public void setEncryptedParameter(@NonNull PreparedStatement ps, int paramIndex, byte[] encrypted)
+      throws SQLException {
+    getPgEncryptedDataHelper().setEncryptedParameter(ps, paramIndex, encrypted);
+  }
+
+  @Override
+  public byte[] getEncryptedBytes(@NonNull ResultSet rs, Object columnRef) throws SQLException {
+    return getPgEncryptedDataHelper().getEncryptedBytes(rs, columnRef);
   }
 }
