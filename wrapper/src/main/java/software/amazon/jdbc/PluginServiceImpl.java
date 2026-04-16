@@ -46,6 +46,7 @@ import software.amazon.jdbc.hostavailability.HostAvailabilityStrategyFactory;
 import software.amazon.jdbc.hostlistprovider.HostListProvider;
 import software.amazon.jdbc.hostlistprovider.HostListProviderService;
 import software.amazon.jdbc.hostlistprovider.StaticHostListProvider;
+import software.amazon.jdbc.plugin.TrackedConnectionList;
 import software.amazon.jdbc.profile.ConfigurationProfile;
 import software.amazon.jdbc.states.SessionStateService;
 import software.amazon.jdbc.states.SessionStateServiceImpl;
@@ -94,6 +95,7 @@ public class PluginServiceImpl implements PluginService, CanReleaseResources,
   protected final SessionStateService sessionStateService;
 
   protected final ResourceLock connectionSwitchLock = new ResourceLock();
+  protected TrackedConnectionList.@Nullable Node trackedConnectionNode = null;
 
   // JDBC call context members
   protected Boolean pooledConnection = null;
@@ -308,6 +310,7 @@ public class PluginServiceImpl implements PluginService, CanReleaseResources,
           try {
             this.currentConnection = connection;
             this.currentHostSpec = hostSpec;
+            this.trackedConnectionNode = null;
 
             this.servicesContainer.getImportantEventService().registerEvent(
                 () -> "Current connection set to " + connection + ", " + hostSpec);
@@ -817,6 +820,16 @@ public class PluginServiceImpl implements PluginService, CanReleaseResources,
   @Override
   public void setIsPooledConnection(Boolean isPooledConnection) {
     this.pooledConnection = isPooledConnection;
+  }
+
+  @Override
+  public TrackedConnectionList.@Nullable Node getTrackedConnectionNode() {
+    return this.trackedConnectionNode;
+  }
+
+  @Override
+  public void setTrackedConnectionNode(TrackedConnectionList.@Nullable Node node) {
+    this.trackedConnectionNode = node;
   }
 
   @Override
