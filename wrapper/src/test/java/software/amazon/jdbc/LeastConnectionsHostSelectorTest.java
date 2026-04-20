@@ -17,6 +17,7 @@
 package software.amazon.jdbc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -70,26 +71,20 @@ public class LeastConnectionsHostSelectorTest {
   }
 
   @Test
-  void testGetHost_emptyHostList_throwsSQLException() {
-    assertThrows(
-        SQLException.class,
-        () -> selector.getHost(Collections.emptyList(), HostRole.READER, props));
+  void testGetHost_emptyHostList_returnsNull() throws SQLException {
+    assertNull(selector.getHost(Collections.emptyList(), HostRole.READER, props));
   }
 
   @Test
-  void testGetHost_noHostsMatchingRole_throwsSQLException() {
+  void testGetHost_noHostsMatchingRole_returnsNull() throws SQLException {
     final List<HostSpec> hosts = Collections.singletonList(writerHost);
-    assertThrows(
-        SQLException.class,
-        () -> selector.getHost(hosts, HostRole.READER, props));
+    assertNull(selector.getHost(hosts, HostRole.READER, props));
   }
 
   @Test
-  void testGetHost_allHostsUnavailable_throwsSQLException() {
+  void testGetHost_allHostsUnavailable_returnsNull() throws SQLException {
     final List<HostSpec> hosts = Collections.singletonList(unavailableReader);
-    assertThrows(
-        SQLException.class,
-        () -> selector.getHost(hosts, HostRole.READER, props));
+    assertNull(selector.getHost(hosts, HostRole.READER, props));
   }
 
   @Test
